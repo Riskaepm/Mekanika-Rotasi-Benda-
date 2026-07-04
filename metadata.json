@@ -1,0 +1,6 @@
+{
+  "name": "Simulasi Rotasi Plat Tebal",
+  "description": "Simulasi interaktif alat laboratorium fisika gerak rotasi plat tebal terhadap sumbu diagonal OP",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
