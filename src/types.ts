@@ -4,36 +4,49 @@
  */
 
 export interface PhysicsParams {
-  plateLength: number;      // a (cm)
-  plateWidth: number;       // b (cm)
-  plateThickness: number;   // c (cm)
-  plateMass: number;        // M (gram)
+  plateLength: number;      // a (m)
+  plateWidth: number;       // b (m)
+  plateThickness: number;   // c (m)
+  plateMass: number;        // M (kg)
   numRotations: number;     // n
   observationTime: number;  // t (seconds)
   userInitialSpeed: number; // Initial speed input (0 = auto)
   frictionCoeff: number;    // mu (0 to 0.2)
   speedMultiplier: number;  // 0.5, 1, 2
   autoStop: boolean;        // Whether to stop after target rotations
+  loadMass: number;         // m (kg)
+  shaftRadius: number;      // r (m)
+  fallHeight: number;       // h (m)
 }
 
 export interface PhysicsResults {
-  volume: number;           // cm^3
-  density: number;          // g/cm^3
-  inertiaXX: number;        // g*cm^2
-  inertiaYY: number;        // g*cm^2
-  inertiaZZ: number;        // g*cm^2
-  inertiaDiag: number;      // g*cm^2
+  volume: number;           // m^3
+  density: number;          // kg/m^3
+  inertiaXX: number;        // kg*m^2
+  inertiaYY: number;        // kg*m^2
+  inertiaZZ: number;        // kg*m^2
+  inertiaDiag: number;      // kg*m^2
   omega0: number;           // rad/s (initial angular velocity)
   currentOmega: number;     // rad/s (current angular velocity)
   currentAngle: number;     // radians
-  currentL: number;         // g*cm^2/s (angular momentum)
-  currentEk: number;        // erg (kinetic energy)
+  currentL: number;         // kg*m^2/s (angular momentum)
+  currentEk: number;        // J (kinetic energy, Joules)
+  acceleration: number;     // a (m/s^2)
+  tension: number;          // T (N)
+  torque: number;           // tau (N*m)
+  angularAcceleration: number; // alpha (rad/s^2)
+  inertiaExperiment: number; // I_exp (kg*m^2)
+  tFall: number;            // seconds
+  currentY: number;         // m (current vertical position)
+  isFalling: boolean;       // is it currently falling
+  currentV: number;         // m/s (instantaneous linear velocity of spool/string)
+  currentVTepi: number;     // m/s (instantaneous linear velocity at the corner of the plate)
 }
 
 export interface ChartDataPoint {
   time: number;             // seconds
   omega: number;            // rad/s
-  ek: number;               // milliJoules (mJ)
+  ek: number;               // Joules (J)
 }
 
 export interface TheoryPracticeRow {
@@ -41,6 +54,5 @@ export interface TheoryPracticeRow {
   unit: string;
   theory: number;
   experiment: number;
-  errorPercent: number;
   description: string;
 }

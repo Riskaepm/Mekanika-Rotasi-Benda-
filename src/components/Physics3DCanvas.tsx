@@ -173,10 +173,10 @@ export default function Physics3DCanvas({ params, results }: Physics3DCanvasProp
 
     ctx.clearRect(0, 0, width, height);
 
-    // Active physics dimensions
-    const a = params.plateLength;
-    const b = params.plateWidth;
-    const c = params.plateThickness;
+    // Active physics dimensions (converted from m to cm for rendering)
+    const a = params.plateLength * 100;
+    const b = params.plateWidth * 100;
+    const c = params.plateThickness * 100;
     const theta = results.currentAngle;
 
     // Define diagonal length
@@ -440,6 +440,221 @@ export default function Physics3DCanvas({ params, results }: Physics3DCanvasProp
         width: 3,
       });
     }
+
+    // =================================================================
+    // NEW: ADD SMALL SPOOL CYLINDER, STRING, AND HANGING WEIGHT
+    // =================================================================
+    const spoolRadius = params.shaftRadius * 100;
+    const coreR = spoolRadius;
+    const flangeR = spoolRadius * 1.3;
+    const spoolXStart = d / 2 + 0.2;
+    const spoolXEnd = d / 2 + 0.9;
+    const numSpoolSegments = 12;
+    const spoolColor = { r: 195, g: 155, b: 65 }; // Shiny Gold/Brass spool
+
+    const spoolVertsLeft: Point3D[] = [];
+    const spoolVertsRight: Point3D[] = [];
+
+    for (let i = 0; i < numSpoolSegments; i++) {
+      const phi = (i / numSpoolSegments) * 2 * Math.PI;
+      const cosP = Math.cos(phi + theta); // rotated in sync with plate
+      const sinP = Math.sin(phi + theta);
+
+      spoolVertsLeft.push({ x: spoolXStart, y: coreR * cosP, z: coreR * sinP });
+      spoolVertsRight.push({ x: spoolXEnd, y: coreR * cosP, z: coreR * sinP });
+    }
+
+    // Draw the 12 core cylinder faces
+    for (let i = 0; i < numSpoolSegments; i++) {
+      const next = (i + 1) % numSpoolSegments;
+      const quadLocal = [
+        spoolVertsLeft[i],
+        spoolVertsRight[i],
+        spoolVertsRight[next],
+        spoolVertsLeft[next],
+      ];
+      const quadProjected = quadLocal.map((v) => projectPoint(v, cameraYaw, cameraPitch, width, height));
+      const avgDepth = quadProjected.reduce((sum, p) => sum + p.depth, 0) / 4;
+
+      const normalPhi = ((i + 0.5) / numSpoolSegments) * 2 * Math.PI;
+      const faceNormal = { x: 0, y: Math.cos(normalPhi + theta), z: Math.sin(normalPhi + theta) };
+      const color = getLitColor(spoolColor.r, spoolColor.g, spoolColor.b, faceNormal);
+
+      sceneQueue.push({
+        type: "polygon",
+        depth: avgDepth - 0.1,
+        color,
+        points: quadProjected,
+        outlineColor: "rgba(100, 80, 20, 0.25)",
+      });
+    }
+
+    // Draw flanges at both ends
+    const addFlangeDisk = (xPos: number) => {
+      const outerVerts: Point3D[] = [];
+      const innerVerts: Point3D[] = [];
+      for (let i = 0; i < numSpoolSegments; i++) {
+        const phi = (i / numSpoolSegments) * 2 * Math.PI;
+        const cosP = Math.cos(phi + theta);
+        const sinP = Math.sin(phi + theta);
+        outerVerts.push({ x: xPos, y: flangeR * cosP, z: flangeR * sinP });
+        innerVerts.push({ x: xPos, y: 0, z: 0 });
+      }
+
+      for (let i = 0; i < numSpoolSegments; i++) {
+        const next = (i + 1) % numSpoolSegments;
+        const triLocal = [
+          innerVerts[i],
+          outerVerts[i],
+          outerVerts[next],
+        ];
+        const triProjected = triLocal.map((v) => projectPoint(v, cameraYaw, cameraPitch, width, height));
+        const avgDepth = triProjected.reduce((sum, p) => sum + p.depth, 0) / 3;
+
+        const faceNormal = { x: xPos > spoolXStart + 0.3 ? 1 : -1, y: 0, z: 0 };
+        const color = getLitColor(spoolColor.r, spoolColor.g, spoolColor.b, faceNormal);
+
+        sceneQueue.push({
+          type: "polygon",
+          depth: avgDepth - 0.15,
+          color,
+          points: triProjected,
+          outlineColor: "rgba(100, 80, 20, 0.3)",
+        });
+      }
+    };
+
+    addFlangeDisk(spoolXStart);
+    addFlangeDisk(spoolXEnd);
+
+    // Dynamic hanging weight cylinder
+    const mGrams = params.loadMass * 1000;
+    const wRadius = 0.5 + ((mGrams - 10) / 190) * 0.45; // scale width: 0.5 to 0.95 cm
+    const wHeight = 1.0 + ((mGrams - 10) / 190) * 0.8;  // scale height: 1.0 to 1.8 cm
+    const weightX = (spoolXStart + spoolXEnd) / 2;
+    
+    // Scale currentY (0 to -fallHeight) to fit nicely in base clearance (0 to -8.5cm)
+    const visualY = (results.currentY / params.fallHeight) * 8.5;
+    const weightY = visualY - 1.0; // Starts 1cm below axle
+    const weightZ = -coreR; // Tangent from spool core
+
+    const numWeightSides = 10;
+    const weightColor = { r: 110, g: 125, b: 140 }; // Industrial iron grey
+    const weightVertsTop: Point3D[] = [];
+    const weightVertsBottom: Point3D[] = [];
+
+    for (let i = 0; i < numWeightSides; i++) {
+      const phi = (i / numWeightSides) * 2 * Math.PI;
+      const cosP = Math.cos(phi);
+      const sinP = Math.sin(phi);
+
+      weightVertsTop.push({
+        x: weightX + wRadius * cosP,
+        y: weightY + wHeight / 2,
+        z: weightZ + wRadius * sinP,
+      });
+      weightVertsBottom.push({
+        x: weightX + wRadius * cosP,
+        y: weightY - wHeight / 2,
+        z: weightZ + wRadius * sinP,
+      });
+    }
+
+    // Weight cylinder sides
+    for (let i = 0; i < numWeightSides; i++) {
+      const next = (i + 1) % numWeightSides;
+      const quadLocal = [
+        weightVertsBottom[i],
+        weightVertsTop[i],
+        weightVertsTop[next],
+        weightVertsBottom[next],
+      ];
+      const quadProjected = quadLocal.map((v) => projectPoint(v, cameraYaw, cameraPitch, width, height));
+      const avgDepth = quadProjected.reduce((sum, p) => sum + p.depth, 0) / 4;
+
+      const normalPhi = ((i + 0.5) / numWeightSides) * 2 * Math.PI;
+      const faceNormal = { x: Math.cos(normalPhi), y: 0, z: Math.sin(normalPhi) };
+      const color = getLitColor(weightColor.r, weightColor.g, weightColor.b, faceNormal);
+
+      sceneQueue.push({
+        type: "polygon",
+        depth: avgDepth,
+        color,
+        points: quadProjected,
+        outlineColor: "rgba(50, 60, 70, 0.4)",
+      });
+    }
+
+    // Weight cylinder top/bottom caps
+    const addWeightCap = (verts: Point3D[], isTop: boolean) => {
+      const center = { x: weightX, y: isTop ? weightY + wHeight / 2 : weightY - wHeight / 2, z: weightZ };
+      for (let i = 0; i < numWeightSides; i++) {
+        const next = (i + 1) % numWeightSides;
+        const triLocal = [
+          center,
+          verts[i],
+          verts[next],
+        ];
+        const triProjected = triLocal.map((v) => projectPoint(v, cameraYaw, cameraPitch, width, height));
+        const avgDepth = triProjected.reduce((sum, p) => sum + p.depth, 0) / 3;
+
+        const faceNormal = { x: 0, y: isTop ? 1 : -1, z: 0 };
+        const color = getLitColor(weightColor.r, weightColor.g, weightColor.b, faceNormal);
+
+        sceneQueue.push({
+          type: "polygon",
+          depth: avgDepth - 0.05,
+          color,
+          points: triProjected,
+          outlineColor: "rgba(50, 60, 70, 0.35)",
+        });
+      }
+    };
+
+    addWeightCap(weightVertsTop, true);
+    addWeightCap(weightVertsBottom, false);
+
+    // 1. Vertical Nylon string from tangent to weight
+    const pStringSpool = projectPoint({ x: weightX, y: 0, z: -coreR }, cameraYaw, cameraPitch, width, height);
+    const pStringWeight = projectPoint({ x: weightX, y: weightY + wHeight / 2, z: weightZ }, cameraYaw, cameraPitch, width, height);
+
+    sceneQueue.push({
+      type: "line",
+      depth: (pStringSpool.depth + pStringWeight.depth) / 2 - 0.1,
+      p0: pStringSpool,
+      p1: pStringWeight,
+      color: "rgba(240, 240, 235, 0.95)", // Highly visible nylon string
+      width: 2.0,
+    });
+
+    // 2. Wrapped Thread Coil (representing the single-loop coil uncoiling)
+    const numWrapPoints = 16;
+    const wrapFraction = Math.max(0, 1 - (Math.abs(theta) / (2 * Math.PI)));
+    if (wrapFraction > 0.01) {
+      const wrapPoints: ProjectedPoint[] = [];
+      for (let i = 0; i <= numWrapPoints; i++) {
+        const phi = (i / numWrapPoints) * 2 * Math.PI * wrapFraction;
+        const angle = -Math.PI / 2 + phi; // wraps starting from bottom-front tangent point
+        const pt = {
+          x: weightX,
+          y: (coreR + 0.04) * Math.sin(angle),
+          z: (coreR + 0.04) * Math.cos(angle),
+        };
+        wrapPoints.push(projectPoint(pt, cameraYaw, cameraPitch, width, height));
+      }
+
+      for (let i = 0; i < wrapPoints.length - 1; i++) {
+        sceneQueue.push({
+          type: "line",
+          depth: (wrapPoints[i].depth + wrapPoints[i+1].depth) / 2 - 0.15,
+          p0: wrapPoints[i],
+          p1: wrapPoints[i+1],
+          color: "rgba(240, 240, 235, 0.95)",
+          width: 2.0,
+        });
+      }
+    }
+    // =================================================================
 
     // 5. ADD SUMBU DIAGONAL OP RED DASHED LINE
     // Shows the exact rotating axis OP along the axle
